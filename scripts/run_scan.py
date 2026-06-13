@@ -14,6 +14,14 @@ ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "output"
 
 
+def normalize_columns(df):
+    """Normalize column names to lowercase and handle common variations."""
+    if df.empty:
+        return df
+    df.columns = df.columns.str.lower().str.strip()
+    return df
+
+
 def build_sector_scores(universe, hist_map):
     sector_scores = {}
     for sector, g in universe.groupby("sector"):
@@ -21,6 +29,9 @@ def build_sector_scores(universe, hist_map):
         for _, row in g.iterrows():
             df = hist_map.get(row["symbol"])
             if df is None or len(df) < 130:
+                continue
+            if "close" not in df.columns:
+                print(f"Warning: 'close' column not found for {row['symbol']}. Available columns: {list(df.columns)}")
                 continue
             ret60 = df["close"].pct_change(60).iloc[-1]
             ma100 = df["close"].rolling(100).mean().iloc[-1]
@@ -43,6 +54,7 @@ def main():
 
     for _, row in universe.iterrows():
         df = fetch_symbol_history(row["symbol"], row.get("yf_symbol"), cfg["market"]["start_date"], cfg["market"]["end_date"])
+        df = normalize_columns(df)
         if len(df) >= cfg["universe"]["min_history_days"]:
             hist_map[row["symbol"]] = df
 
@@ -66,6 +78,16 @@ def main():
     if out.empty:
         out = pd.DataFrame(columns=["symbol", "sector", "industry", "composite_score"])
     else:
+        # Normalize output columns
+        out.columns = out.columns.str.lower().str.strip()
+        
+        # Ensure required columns exist before filtering
+        required_cols = ["close", "median_turnover_cr", "trend_ok", "composite_score", "ret_60", "sector_score", "z20"]
+        missing_cols = [col for col in required_cols if col not in out.columns]
+        if missing_cols:
+            print(f"Warning: Missing columns in output: {missing_cols}")
+            print(f"Available columns: {list(out.columns)}")
+        
         out = out[
             (out["close"] >= cfg["universe"]["min_price"]) &
             (out["median_turnover_cr"] >= cfg["universe"]["min_median_turnover_cr"]) &
