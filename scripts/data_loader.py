@@ -36,6 +36,11 @@ def _normalize(df: pd.DataFrame) -> pd.DataFrame:
         if "date" not in df.columns and "Date" in df.columns:
             df = df.rename(columns={"Date": "date"})
     df = df[[c for c in needed if c in df.columns]].copy()
+    
+    # Validate that critical columns exist
+    if "close" not in df.columns:
+        raise ValueError(f"'close' column not found after normalization. Available columns: {list(df.columns)}")
+    
     df["date"] = pd.to_datetime(df["date"]).dt.tz_localize(None)
     return df.sort_values("date").drop_duplicates("date")
 
@@ -47,11 +52,16 @@ def fetch_symbol_history(symbol: str, yf_symbol: str | None, start_date: str, en
             df = _normalize(raw)
             if len(df) > 50:
                 return df
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"Warning: Failed to fetch {symbol} from NSEDownload: {e}")
+    
     ticker = yf_symbol or f"{symbol}.NS"
-    raw = yf.download(ticker, start=start_date, end=end_date, auto_adjust=True, progress=False)
-    if raw.empty:
+    try:
+        raw = yf.download(ticker, start=start_date, end=end_date, auto_adjust=True, progress=False)
+        if raw.empty:
+            return pd.DataFrame(columns=["date", "open", "high", "low", "close", "volume"])
+        raw = raw.reset_index()
+        return _normalize(raw)
+    except Exception as e:
+        print(f"Warning: Failed to fetch {ticker} from yfinance: {e}")
         return pd.DataFrame(columns=["date", "open", "high", "low", "close", "volume"])
-    raw = raw.reset_index()
-    return _normalize(raw)
