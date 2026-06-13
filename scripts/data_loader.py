@@ -13,6 +13,12 @@ except Exception:
 
 def _normalize(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
+    
+    # Flatten MultiIndex columns if they exist
+    if isinstance(df.columns, pd.MultiIndex):
+        df.columns = ['_'.join(col).strip() if isinstance(col, tuple) else col for col in df.columns]
+    
+    # Now safely call .lower() on column names
     cols = {c.lower(): c for c in df.columns}
     rename_map = {}
     for c in df.columns:
@@ -37,7 +43,7 @@ def _normalize(df: pd.DataFrame) -> pd.DataFrame:
 def fetch_symbol_history(symbol: str, yf_symbol: str | None, start_date: str, end_date: str | None):
     if stocks is not None:
         try:
-            raw = stocks.get_adjusted_stock(symbol=symbol, start_date=pd.to_datetime(start_date).strftime("%d-%m-%Y"), end_date=pd.Timestamp.today().strftime("%d-%m-%Y") if end_date is None else pd.to_datetime(end_date).strftime("%d-%m-%Y"))
+            raw = stocks.get_adjusted_stock(symbol=symbol, start_date=pd.to_datetime(start_date).strftime("%d-%m-%Y"), end_date=pd.Timestamp.today().strftime("%d-%m-%Y") if end_date is None else end_date)
             df = _normalize(raw)
             if len(df) > 50:
                 return df
